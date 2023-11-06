@@ -676,25 +676,73 @@ app.post('/employee/leave', async (req, res) => {
   }
 });
 
+// app.post('/account/:account_no/deposit', async (req, res) => {
+//   const accountNo = parseInt(req.params.account_no, 10); // URL 파라미터에서 계좌 번호를 가져옴
+//   const { customerId, amount } = req.body; // 요청 본문에서 고객 ID와 입금액을 가져옴
+
+//   try {
+//     // 계좌의 소유자 확인
+//     const owns = await prisma.owns.findUnique({
+//       where: {
+//         customerID_accNumber: {
+//           customerID: customerId,
+//           accNumber: accountNo
+//         }
+//       },
+//     });
+
+//     // 계좌가 존재하지 않거나, 요청한 고객 ID가 계좌 소유자의 ID와 일치하지 않는 경우
+//     if (!owns.accNumber || owns.customerID !== customerId) {
+//       return res.status(403).json({ message: 'Access denied or account not found.' });
+//     }
+
+//     // 입금 처리: 계좌 잔액을 업데이트
+//     const updatedAccount = await prisma.account.update({
+//       where: { accNumber: accountNo },
+//       data: { balance: (parseFloat(prisma.account.balance) + parseFloat(amount)).toString },
+//     });
+
+//     // 업데이트된 잔액 반환
+//     res.json({ newBalance: updatedAccount.balance });
+//   } catch (error) {
+//     res.status(500).json({ error: error.message });
+//   }
+// });
+
 app.post('/account/:account_no/deposit', async (req, res) => {
-  const accountNo = req.params.account_no; // URL 파라미터에서 계좌 번호를 가져옴
+  const accountNo = parseInt(req.params.account_no, 10); // URL 파라미터에서 계좌 번호를 가져옴
   const { customerId, amount } = req.body; // 요청 본문에서 고객 ID와 입금액을 가져옴
 
   try {
     // 계좌의 소유자 확인
+    const owns = await prisma.owns.findUnique({
+      where: {
+        customerID_accNumber: {
+          customerID: customerId,
+          accNumber: accountNo
+        }
+      },
+    });
+
+    // 계좌가 존재하지 않거나, 요청한 고객 ID가 계좌 소유자의 ID와 일치하지 않는 경우
+    if (!owns || owns.customerID !== customerId) {
+      return res.status(403).json({ message: 'Access denied or account not found.' });
+    }
+
+    // 계좌의 현재 잔액 조회
     const account = await prisma.account.findUnique({
       where: { accNumber: accountNo },
     });
 
-    // 계좌가 존재하지 않거나, 요청한 고객 ID가 계좌 소유자의 ID와 일치하지 않는 경우
-    if (!account || account.customerId !== customerId) {
-      return res.status(403).json({ message: 'Access denied or account not found.' });
+    if (!account) {
+      return res.status(404).json({ message: 'Account not found.' });
     }
 
     // 입금 처리: 계좌 잔액을 업데이트
+    const newBalance = (parseFloat(account.balance) + parseFloat(amount)).toString();
     const updatedAccount = await prisma.account.update({
       where: { accNumber: accountNo },
-      data: { balance: { increment: amount } },
+      data: { balance: newBalance },
     });
 
     // 업데이트된 잔액 반환
@@ -704,20 +752,32 @@ app.post('/account/:account_no/deposit', async (req, res) => {
   }
 });
 
+
 app.post('/account/:account_no/withdraw', async (req, res) => {
-  const accountNo = req.params.account_no; // URL 파라미터에서 계좌 번호를 가져옴
+  const accountNo = parseInt(req.params.account_no, 10); // URL 파라미터에서 계좌 번호를 가져옴
   const { customerId, amount } = req.body; // 요청 본문에서 고객 ID와 출금액을 가져옴
 
   try {
     // 계좌 정보 확인
+    const owns = await prisma.owns.findUnique({
+      where: {
+        customerID_accNumber: {
+          customerID: customerId,
+          accNumber: accountNo
+        }
+      },
+    });
+    
+
+    // 계좌가 존재하지 않거나, 요청한 고객 ID가 계좌 소유자의 ID와 일치하지 않는 경우
+    if (!owns || owns.customerID !== customerId) {
+      return res.status(403).json({ message: 'Access denied or account not found.' });
+    }
+
+    // 계좌의 현재 잔액 조회
     const account = await prisma.account.findUnique({
       where: { accNumber: accountNo },
     });
-
-    // 계좌가 존재하지 않거나, 요청한 고객 ID가 계좌 소유자의 ID와 일치하지 않는 경우
-    if (!account || account.customerId !== customerId) {
-      return res.status(403).json({ message: 'Access denied or account not found.' });
-    }
 
     // 출금 후 잔액이 0원 미만이 되는 경우
     if (account.balance - amount < 0) {
@@ -725,9 +785,10 @@ app.post('/account/:account_no/withdraw', async (req, res) => {
     }
 
     // 출금 처리: 계좌 잔액을 업데이트
+    const newBalance = (parseFloat(account.balance) - parseFloat(amount)).toString();
     const updatedAccount = await prisma.account.update({
       where: { accNumber: accountNo },
-      data: { balance: { decrement: amount } },
+      data: { balance: newBalance },
     });
 
     // 업데이트된 잔액 반환
