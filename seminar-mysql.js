@@ -4,6 +4,7 @@ const { PrismaClient } = require('@prisma/client'); // PrismaClient를 불러옵
 const app = express();
 const prisma = new PrismaClient(); // Prisma 클라이언트 인스턴스를 생성합니다.
 const port = 3000;
+app.use(express.json());
 
 // BigInt.function.toJSON = function() {return this.toString}
 // async function getCustomersWithIncomeRangeRaw() {
@@ -379,13 +380,13 @@ LIMIT 10;
   return result;
 }
 
-async function registerEmployee(employeeData) {
-  // employeeData should include all the necessary fields required to create a new employee record
-  const newEmployee = await prisma.employee.create({
-    data: employeeData
-  });
-  return newEmployee;
-}
+// async function registerEmployee(employeeData) {
+//   // employeeData should include all the necessary fields required to create a new employee record
+//   const newEmployee = await prisma.employee.create({
+//     data: employeeData
+//   });
+//   return newEmployee;
+// }
 
 
 // 문제 1에 해당하는 엔드포인트
@@ -618,43 +619,60 @@ app.get('/problems/20', async (req, res) => {
   }
 });
 
+// POST /employee/join 엔드포인트에 대한 핸들러
 app.post('/employee/join', async (req, res) => {
-  try {
-    // 새 직원 데이터를 req.body에서 추출합니다. 이는 front-end에서 보내야 합니다.
-    const employeeData = req.body;
-    
-    // 데이터베이스에 새 직원을 등록합니다.
-    await registerEmployee(employeeData);
+  // 요청 본문에서 직원 데이터 추출
+  const { sin, firstName, lastName, salary, branchNumber } = req.body;
 
-    // 성공 메시지를 반환합니다.
-    res.status(201).send('이 팀은 미친듯이 일하는 일꾼들로 이루어진 광전사 설탕 노움 조합이다. 분위기에 적응하기는 쉽지 않지만 아주 화력이 좋은 강력한 조합인거 같다.');
+  // 입력 값 검증
+  if (!sin || !firstName || !lastName || !salary || !branchNumber) {
+    return res.status(400).send({ message: "모든 필드를 제공해야 합니다." });
+  }
+
+  try {
+    // Prisma ORM을 사용하여 Employee 테이블에 새로운 레코드 추가
+    const newEmployee = await prisma.employee.create({
+      data: {
+        sin: sin,
+        firstName: firstName,
+        lastName: lastName,
+        salary: salary,
+        branchNumber: branchNumber
+      }
+    });
+
+    // 성공 메시지와 함께 새로운 직원 데이터 반환
+    res.status(201).send({
+      message: '이 팀은 미친듯이 일하는 일꾼들로 이루어진 광전사 설탕 노움 조합이다. 분위기에 적응하기는 쉽지 않지만 아주 화력이 좋은 강력한 조합인거 같다.',
+      employee: newEmployee
+    });
   } catch (error) {
-    // 오류 처리
-    res.status(500).send(error.message);
+    // 에러 처리
+    res.status(500).send({ message: "직원 등록 중 오류가 발생했습니다.", error: error.message });
   }
 });
 
 app.post('/employee/leave', async (req, res) => {
-  // 여기서 req.body는 필요한 정보, 예를 들어 employee ID를 포함해야 합니다.
-  // 이 예제에서는 employee ID가 req.body.id로 제공된다고 가정합니다.
-  const employeeId = req.body.id;
-  
+  const { sin } = req.body; // `sin`을 통해 employee를 식별
+
   try {
-    // Soft-delete 구현: `isActive` 상태를 false로 설정
-    // Employee 모델에 isActive 필드가 있다고 가정합니다.
-    const updateResult = await prisma.employee.update({
-      where: { id: employeeId },
-      data: { isActive: false }
+    // Employee 레코드를 삭제하여 hard-delete 실행
+    const deleteEmployee = await prisma.employee.delete({
+      where: { sin },
     });
 
-    // 업데이트 결과에 따라 클라이언트에 메시지 반환
-    if (updateResult) {
-      res.send('**안녕히 계세요 여러분!\n전 이 세상의 모든 굴레와 속박을 벗어 던지고 제 행복을 찾아 떠납니다!\n여러분도 행복하세요~~!**');
-    } else {
-      res.status(404).send('Employee not found.');
-    }
+    // 성공적으로 삭제되면 메시지 반환
+    res.send('**안녕히 계세요 여러분!\n전 이 세상의 모든 굴레와 속박을 벗어 던지고 제 행복을 찾아 떠납니다!\n여러분도 행복하세요~~!**');
   } catch (error) {
-    res.status(500).send('An error occurred while processing your request.');
+    // 오류 발생 시 처리
+    if (error.code === 'P2025') {
+      // 삭제하려는 레코드가 없을 경우
+      res.status(404).send('Employee not found.');
+    } else {
+      // 다른 종류의 오류 발생 시
+      console.error('Error during employee leave:', error);
+      res.status(500).send('An error occurred while processing your request.');
+    }
   }
 });
 
